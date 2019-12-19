@@ -1,4 +1,5 @@
 from django.core.paginator import Paginator
+from rest_framework.pagination import PageNumberPagination
 
 
 class QuerybuilderPaginator(Paginator):
@@ -12,4 +13,8 @@ class QuerybuilderPaginator(Paginator):
         number = self.validate_number(number)
         bottom = (number - 1) * self.per_page
         top = self.per_page
-        return self._get_page(self.object_list[bottom:top], number, self)
+        return self._get_page(self.object_list, number, self)
+
+class QueryPageNumberPagination(PageNumberPagination):
+    django_paginator_class = QuerybuilderPaginator
+

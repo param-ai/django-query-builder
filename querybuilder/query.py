@@ -268,6 +268,8 @@ class Where(object):
         'icontains': 'ILIKE',
         'startswith': 'LIKE',
         'in': 'IN',
+        'isnull': 'IS NULL',
+        'isnotnull': 'IS NOT NULL'
     }
 
     def __init__(self):
@@ -321,6 +323,8 @@ class Where(object):
             value = '%{0}%'.format(value)
         elif operator == 'startswith':
             value = '{0}%'.format(value)
+        elif operator in ('isnull', 'isnotnull'):
+            value = None
         return value
 
     def build_where_part(self, wheres):
@@ -405,6 +409,8 @@ class Where(object):
 
                     if type(value) is Expression:
                         condition = condition.replace('?', value.str)
+                    elif value is None:
+                        condition = condition.replace('?', '')
                     else:
                         named_arg = self.set_arg(value)
                         # replace the ? in the query with the arg placeholder
@@ -759,7 +765,7 @@ class Query(object):
 
     def join(self, right_table=None, fields=None, condition=None, join_type='JOIN',
              schema=None, left_table=None, extract_fields=True, prefix_fields=False, field_prefix=None,
-             allow_duplicates=False):
+             allow_duplicates=False, **extras):
         """
         Joins a table to another table based on a condition and adds fields from the joined table
         to the returned fields.
@@ -1059,7 +1065,7 @@ class Query(object):
         """
         self._where.arg_prefix = prefix
 
-    def get_sql(self, debug=False, use_cache=True):
+    def get_sql(self, debug=False, use_cache=True, custom_where=None, custom_select='', replace_select=False):
         """
         Generates the sql for this query and returns the sql as a string.
 
@@ -1088,13 +1094,15 @@ class Query(object):
         # build each part of the query
         sql = ''
         sql += self.build_withs()
-        sql += self.build_select_fields()
+        sql += self.build_select_fields(custom_select, replace_select)
         sql += self.build_from_table()
         sql += self.build_joins()
         sql += self.build_where()
         sql += self.build_groups()
         sql += self.build_order_by()
         sql += self.build_limit()
+        if custom_where:
+            sql += custom_where
 
         # remove any whitespace from the beginning and end of the sql
         self.sql = sql.strip()
@@ -1381,7 +1389,7 @@ class Query(object):
 
         return inner_queries
 
-    def build_select_fields(self):
+    def build_select_fields(self, custom_select='', replace_select=False):
         """
         Generates the sql for the SELECT portion of the query
 
@@ -1399,7 +1407,11 @@ class Query(object):
             field_sql += join_item.right_table.get_field_sql()
 
         # combine all field sql separated by a comma
-        sql = 'SELECT {0}{1} '.format(self.get_distinct_sql(), ', '.join(field_sql))
+        if replace_select:
+            sql = 'SELECT {0} '.format(custom_select)
+        else:
+            sql = 'SELECT {0} {1}{2} '.format(custom_select, self.get_distinct_sql(), ', '.join(field_sql))
+        # print(sql)
         return sql
 
     def get_distinct_sql(self):
@@ -1637,7 +1649,6 @@ class Query(object):
         # determine which sql to use
         if sql is None:
             sql = self.get_sql()
-
         # determine which sql args to use
         if sql_args is None:
             sql_args = self.get_args()
